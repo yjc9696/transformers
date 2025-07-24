@@ -43,7 +43,7 @@ class HunYuanMoEV1ModelTester(CausalLMModelTester):
 
 
 @require_torch
-class HunYuanMoEV1ModelTest(CausalLMModelTest, unittest.TestCase):
+class HunYuanMoEV1ModelTest(unittest.TestCase):
     all_model_classes = (
         (
             HunYuanMoEV1Model,

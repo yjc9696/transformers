@@ -15,12 +15,9 @@
 
 import unittest
 
-from transformers import AutoTokenizer, HunYuanMoeV1Config, is_torch_available
+from transformers import HunYuanMoeV1Config, is_torch_available
 from transformers.testing_utils import (
-    cleanup,
     require_torch,
-    slow,
-    torch_device,
 )
 
 
@@ -31,7 +28,7 @@ if is_torch_available():
         HunYuanMoEV1Model,
     )
 
-from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...causal_lm_tester import CausalLMModelTester
 
 
 class HunYuanMoEV1ModelTester(CausalLMModelTester):

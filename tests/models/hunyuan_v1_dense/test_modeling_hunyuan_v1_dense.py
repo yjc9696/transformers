@@ -27,8 +27,8 @@ from transformers.testing_utils import (
 if is_torch_available():
     from transformers import (
         HunYuanDenseV1ForCausalLM,
-        HunYuanForSequenceClassification,
-        HunYuanModel,
+        HunYuanDenseV1ForSequenceClassification,
+        HunYuanDenseV1Model,
     )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -37,18 +37,18 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 class HunYuanDenseV1ModelTester(CausalLMModelTester):
     config_class = HunYuanDenseV1Config
     if is_torch_available():
-        base_model_class = HunYuanModel
+        base_model_class = HunYuanDenseV1Model
         causal_lm_class = HunYuanDenseV1ForCausalLM
-        sequence_class = HunYuanForSequenceClassification
+        sequence_class = HunYuanDenseV1ForSequenceClassification
 
 
 @require_torch
 class HunYuanDenseV1ModelTest(CausalLMModelTest, unittest.TestCase):
     all_model_classes = (
         (
-            HunYuanModel,
+            HunYuanDenseV1Model,
             HunYuanDenseV1ForCausalLM,
-            HunYuanForSequenceClassification,
+            HunYuanDenseV1ForSequenceClassification,
         )
         if is_torch_available()
         else ()
@@ -58,15 +58,14 @@ class HunYuanDenseV1ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = HunYuanDenseV1ModelTester
     pipeline_model_mapping = (
         {
-            "feature-extraction": HunYuanModel,
+            "feature-extraction": HunYuanDenseV1Model,
             "text-generation": HunYuanDenseV1ForCausalLM,
-            "text-classification": HunYuanForSequenceClassification,
+            "text-classification": HunYuanDenseV1ForSequenceClassification,
         }
         if is_torch_available()
         else {}
     )
 
-    # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
         self,
         pipeline_test_case_name,

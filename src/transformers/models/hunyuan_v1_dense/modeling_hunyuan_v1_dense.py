@@ -5,7 +5,7 @@
 
 import math
 import warnings
-from typing import Optional, Union, Unpack
+from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -37,7 +37,7 @@ from transformers.utils import (
     replace_return_docstrings,
 )
 from transformers.utils.import_utils import is_torch_fx_available
-
+from ...processing_utils import Unpack
 from ...generation import GenerationMixin
 from .configuration_hunyuan_v1_dense import HunYuanDenseV1Config
 

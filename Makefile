@@ -73,8 +73,8 @@ extra_style_checks:
 # this target runs checks on all files and potentially modifies some of them
 
 style:
-	ruff check $(check_dirs) setup.py conftest.py --fix --exclude $(exclude_folders)
-	ruff format $(check_dirs) setup.py conftest.py --exclude $(exclude_folders)
+	python3 -m ruff check $(check_dirs) setup.py conftest.py --fix --exclude $(exclude_folders)
+	python3 -m ruff format $(check_dirs) setup.py conftest.py --exclude $(exclude_folders)
 	${MAKE} autogenerate_code
 	${MAKE} extra_style_checks
 

@@ -102,10 +102,6 @@ class HunYuanDenseV1Config(PretrainedConfig):
         norm_type (str, *optional*, defaults to `"hf_rms"`):
             Normalization type to use. Supported values are `"hf_rms"` (HuggingFace RMSNorm),
             `"layer_norm"` (standard LayerNorm), or `"no_norm"` (disabled normalization).
-        pool_type (str, *optional*, defaults to `"last"`):
-            Pooling strategy for sequence outputs. Options:
-            - `"last"`: Use the last token's hidden state
-            - `"mean"`: Mean pooling of all tokens
         pad_id (int, *optional*, defaults to -1):
             Token id used for padding sequences. Values <= -1 typically indicate no padding.
             Should match the tokenizer's pad_token_id if padding is enabled.
@@ -143,7 +139,6 @@ class HunYuanDenseV1Config(PretrainedConfig):
         use_qk_norm=False,
         use_rotary_pos_emb=True,
         norm_type="hf_rms",
-        pool_type="last",
         pad_id=-1,
         head_dim=None,
         **kwargs,
@@ -178,7 +173,6 @@ class HunYuanDenseV1Config(PretrainedConfig):
         self.use_qk_norm = use_qk_norm
         self.use_rotary_pos_emb = use_rotary_pos_emb
         self.norm_type = norm_type
-        self.pool_type = pool_type
         self.pad_id = pad_id
 
         super().__init__(

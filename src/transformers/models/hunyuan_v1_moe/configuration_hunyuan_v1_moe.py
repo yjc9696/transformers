@@ -116,10 +116,6 @@ class HunYuanMoEV1Config(PretrainedConfig):
             Whether to drop tokens exceeding expert capacity instead of padding.
         moe_random_routing_dropped_token (bool, *optional*, defaults to `False`):
             If True, randomly routes dropped tokens to available experts.
-        pool_type (str, *optional*, defaults to `"last"`):
-            Pooling strategy for sequence outputs. Options:
-            - `"last"`: Use the last token's hidden state
-            - `"mean"`: Mean pooling of all tokens
         pad_id (int, *optional*, defaults to -1):
             Token id used for padding sequences. Values <= -1 typically indicate no padding.
             Should match the tokenizer's pad_token_id if padding is enabled.
@@ -164,7 +160,6 @@ class HunYuanMoEV1Config(PretrainedConfig):
         # capacity_factor: Union[int, List]=1.0,
         moe_drop_tokens=False,
         moe_random_routing_dropped_token=False,
-        pool_type="last",
         pad_id=-1,
         head_dim=None,
         **kwargs,
@@ -207,7 +202,6 @@ class HunYuanMoEV1Config(PretrainedConfig):
         self.norm_type = norm_type
 
         # DeepSeek related args
-        self.pool_type = pool_type
         self.pad_id = pad_id
 
         super().__init__(

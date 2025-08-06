@@ -270,15 +270,23 @@ class HunYuanDenseV1DecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring
 class HunYuanDenseV1PreTrainedModel(PreTrainedModel):
-    config_class = HunYuanDenseV1Config
+    config: HunYuanDenseV1Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["HunYuanDenseV1DecoderLayer"]
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_cache_class = True
+    _supports_flex_attn = True
+
+    _can_compile_fullgraph = True
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": HunYuanDenseV1DecoderLayer,
+        "attentions": HunYuanDenseV1Attention,
+    }
 
     def _init_weights(self, module):
         std = self.config.initializer_range

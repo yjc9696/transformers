@@ -35,6 +35,7 @@ from ..llama.modeling_llama import (
     LlamaForCausalLM,
     LlamaForSequenceClassification,
     LlamaMLP,
+    LlamaPreTrainedModel,
     LlamaRMSNorm,
     apply_rotary_pos_emb,
     eager_attention_forward,
@@ -112,16 +113,7 @@ class HunYuanDenseV1DecoderLayer(LlamaDecoderLayer):
         self.layer_idx = layer_idx
 
 
-class HunYuanDenseV1PreTrainedModel(PreTrainedModel):
-    config_class = HunYuanDenseV1Config
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["HunYuanDenseV1DecoderLayer"]
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_cache_class = True
-
+class HunYuanDenseV1PreTrainedModel(LlamaPreTrainedModel):
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
@@ -132,7 +124,6 @@ class HunYuanDenseV1PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-
 
 class HunYuanDenseV1Model(MistralModel):
     pass

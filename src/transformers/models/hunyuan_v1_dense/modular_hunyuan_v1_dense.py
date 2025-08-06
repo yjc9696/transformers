@@ -14,77 +14,54 @@
 # limitations under the License.
 """PyTorch HunYuanDenseV1 model."""
 
-import math
-import warnings
-from typing import Optional, Union
+from typing import Callable, Optional
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from transformers.activations import ACT2FN
-from transformers.cache_utils import Cache, DynamicCache
-from transformers.modeling_attn_mask_utils import (
-    AttentionMaskConverter,
-    _prepare_4d_attention_mask,
-    _prepare_4d_causal_attention_mask,
-    _prepare_4d_causal_attention_mask_for_sdpa,
-)
-from transformers.modeling_outputs import (
-    BaseModelOutputWithPast,
-    CausalLMOutputWithPast,
-    SequenceClassifierOutputWithPast,
-)
+from transformers.cache_utils import Cache
 from transformers.modeling_utils import PreTrainedModel
-from transformers.pytorch_utils import ALL_LAYERNORM_LAYERS, is_torch_greater_or_equal_than_1_13
 from transformers.utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
     logging,
-    replace_return_docstrings,
 )
-from transformers.utils.import_utils import is_torch_fx_available
 
-from ...generation import GenerationMixin
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs
 from ..llama.modeling_llama import (
     LlamaAttention,
-    LlamaForCausalLM,
-    LlamaMLP,
     LlamaDecoderLayer,
     LlamaForCausalLM,
-    LlamaModel,
-    LlamaPreTrainedModel,
     LlamaForSequenceClassification,
+    LlamaMLP,
     LlamaRMSNorm,
-    LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
-    rotate_half,
 )
 from ..mistral.modeling_mistral import MistralModel
 from .configuration_hunyuan_v1_dense import HunYuanDenseV1Config
 
+
 logger = logging.get_logger(__name__)
+
 
 class HunYuanDenseV1RMSNorm(LlamaRMSNorm):
     pass
+
 
 class HunYuanDenseV1MLP(LlamaMLP):
     def __init__(self, config: HunYuanDenseV1Config, layer_idx=None, is_shared_mlp=False):
         super().__init__(config)
         self.layer_idx = layer_idx
 
+
 class HunYuanDenseV1Attention(LlamaAttention):
     def __init__(self, config: HunYuanDenseV1Config, layer_idx: int):
         super().__init__(config, layer_idx)
         self.query_layernorm = HunYuanDenseV1RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.key_layernorm = HunYuanDenseV1RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -128,10 +105,12 @@ class HunYuanDenseV1Attention(LlamaAttention):
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
+
 class HunYuanDenseV1DecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: HunYuanDenseV1Config, layer_idx: int):
         super().__init__()
         self.layer_idx = layer_idx
+
 
 class HunYuanDenseV1PreTrainedModel(PreTrainedModel):
     config_class = HunYuanDenseV1Config
@@ -154,6 +133,7 @@ class HunYuanDenseV1PreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
+
 class HunYuanDenseV1Model(MistralModel):
     pass
 
@@ -161,8 +141,10 @@ class HunYuanDenseV1Model(MistralModel):
 class HunYuanDenseV1ForCausalLM(LlamaForCausalLM):
     pass
 
+
 class HunYuanDenseV1ForSequenceClassification(LlamaForSequenceClassification):
     pass
+
 
 __all__ = [
     "HunYuanDenseV1ForCausalLM",

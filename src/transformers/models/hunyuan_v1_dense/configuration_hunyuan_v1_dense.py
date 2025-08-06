@@ -141,6 +141,7 @@ class HunYuanDenseV1Config(PretrainedConfig):
         norm_type="hf_rms",
         pad_id=-1,
         head_dim=None,
+        sliding_window=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -149,7 +150,7 @@ class HunYuanDenseV1Config(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-
+        self.sliding_window = sliding_window
         self.head_dim = head_dim
         if attention_head_dim is not None:
             self.attention_head_dim = attention_head_dim

@@ -39,7 +39,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs
-from .configuration_hunyuan_v1_dense import HunYuanMoEV1Config
+from .configuration_hunyuan_v1_moe import HunYuanMoEV1Config
 
 
 @use_kernel_forward_from_hub("RMSNorm")

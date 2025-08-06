@@ -52,7 +52,7 @@ from transformers.utils.import_utils import is_torch_fx_available
 from ...generation import GenerationMixin
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs
-from transformers.llama.modeling_llama import (
+from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaForCausalLM,
     LlamaMLP,
@@ -60,6 +60,7 @@ from transformers.llama.modeling_llama import (
     LlamaForCausalLM,
     LlamaModel,
     LlamaPreTrainedModel,
+    LlamaForSequenceClassification,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
@@ -71,47 +72,46 @@ from .configuration_hunyuan_v1_dense import HunYuanDenseV1Config
 
 logger = logging.get_logger(__name__)
 
-class HunYuanRMSNorm(LlamaRMSNorm):
+class HunYuanDenseV1RMSNorm(LlamaRMSNorm):
     pass
 
-class HunYuanMLP(GemmaMLP):
-
+class HunYuanDenseV1MLP(LlamaMLP):
     def __init__(self, config: HunYuanDenseV1Config, layer_idx=None, is_shared_mlp=False):
         super().__init__(config)
         self.layer_idx = layer_idx
 
-class HunYuanAttention(LlamaAttention):
+class HunYuanDenseV1Attention(LlamaAttention):
     def __init__(self, config: HunYuanDenseV1Config, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.q_norm = HunYuanRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
-        self.k_norm = HunYuanRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
+        self.q_norm = HunYuanDenseV1RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
+        self.k_norm = HunYuanDenseV1RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
 
-# class HunYuanSdpaAttention(HunYuanAttention):
+# class HunYuanSdpaAttention(HunYuanDenseV1Attention):
 #     """
 #     HunYuan attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
-#     `HunYuanAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt
+#     `HunYuanDenseV1Attention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt
 #     to SDPA API.
 #     """
 #     pass
 
 # HUNYUAN_ATTENTION_CLASSES = {
-#     "eager": HunYuanAttention,
+#     "eager": HunYuanDenseV1Attention,
 #     "sdpa": HunYuanSdpaAttention,
 # }
 
 
-class HunYuanDecoderLayer(LlamaDecoderLayer):
+class HunYuanDenseV1DecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: HunYuanDenseV1Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.layer_idx = layer_idx
 
-        self.self_attn = HunYuanAttention(config=config, layer_idx=layer_idx)
+        self.self_attn = HunYuanDenseV1Attention(config=config, layer_idx=layer_idx)
 
-        self.mlp = HunYuanMLP(config, layer_idx=layer_idx, is_shared_mlp=False)
+        self.mlp = HunYuanDenseV1MLP(config, layer_idx=layer_idx, is_shared_mlp=False)
         if config.norm_type == "hf_rms" or config.norm_type == "rms":
-            self.input_layernorm = HunYuanRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-            self.post_attention_layernorm = HunYuanRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+            self.input_layernorm = HunYuanDenseV1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+            self.post_attention_layernorm = HunYuanDenseV1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         elif config.norm_type == "fused" or config.norm_type == "torch_nn":
             self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
             self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -148,7 +148,7 @@ class HunYuanDenseV1Model(HunYuanDenseV1PreTrainedModel):
         self.layers = nn.ModuleList(
             [HunYuanDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = HunYuanRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = HunYuanDenseV1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -221,6 +221,7 @@ class HunYuanDenseV1Model(HunYuanDenseV1PreTrainedModel):
 
 class HunYuanDenseV1ForCausalLM(LlamaForCausalLM):
     pass
+
 class HunYuanDenseV1ForSequenceClassification(LlamaForSequenceClassification):
     pass
 

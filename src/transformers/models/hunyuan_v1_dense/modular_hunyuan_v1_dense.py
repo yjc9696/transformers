@@ -21,7 +21,6 @@ import torch.utils.checkpoint
 from torch import nn
 
 from transformers.cache_utils import Cache
-from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import (
     logging,
 )
@@ -124,6 +123,7 @@ class HunYuanDenseV1PreTrainedModel(LlamaPreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+
 
 class HunYuanDenseV1Model(MistralModel):
     pass

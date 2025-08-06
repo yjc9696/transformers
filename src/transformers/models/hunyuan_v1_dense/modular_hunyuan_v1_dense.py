@@ -83,8 +83,8 @@ class HunYuanDenseV1MLP(LlamaMLP):
 class HunYuanDenseV1Attention(LlamaAttention):
     def __init__(self, config: HunYuanDenseV1Config, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.q_norm = HunYuanDenseV1RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
-        self.k_norm = HunYuanDenseV1RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
+        self.query_layernorm = HunYuanDenseV1RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.key_layernorm = HunYuanDenseV1RMSNorm(self.head_dim, eps=config.rms_norm_eps)
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -97,8 +97,8 @@ class HunYuanDenseV1Attention(LlamaAttention):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
-        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        query_states = self.query_layernorm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        key_states = self.key_layernorm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings

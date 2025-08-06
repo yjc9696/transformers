@@ -122,7 +122,7 @@ class HunYuanDenseV1PreTrainedModel(PreTrainedModel):
     config_class = HunYuanDenseV1Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["HunYuanDecoderLayer"]
+    _no_split_modules = ["HunYuanDenseV1DecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_sdpa = True
@@ -146,7 +146,7 @@ class HunYuanDenseV1Model(HunYuanDenseV1PreTrainedModel):
         self.vocab_size = config.vocab_size
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [HunYuanDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [HunYuanDenseV1DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = HunYuanDenseV1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 

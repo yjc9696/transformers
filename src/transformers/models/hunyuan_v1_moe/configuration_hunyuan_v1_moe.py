@@ -162,6 +162,7 @@ class HunYuanMoEV1Config(PretrainedConfig):
         moe_random_routing_dropped_token=False,
         pad_id=-1,
         head_dim=None,
+        sliding_window=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -170,6 +171,7 @@ class HunYuanMoEV1Config(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.sliding_window = sliding_window
         self.num_experts = num_experts
         self.use_mixed_mlp_moe = use_mixed_mlp_moe
         self.moe_topk = moe_topk

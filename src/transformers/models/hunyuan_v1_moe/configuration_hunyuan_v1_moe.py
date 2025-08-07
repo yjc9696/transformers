@@ -140,7 +140,6 @@ class HunYuanMoEV1Config(PretrainedConfig):
         rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
-        norm_type="hf_rms",
         num_experts: Union[int, list] = 1,
         use_mixed_mlp_moe=False,
         moe_topk: Union[int, list] = 1,

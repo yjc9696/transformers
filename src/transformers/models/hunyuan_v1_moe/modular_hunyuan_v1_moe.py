@@ -41,7 +41,7 @@ from ..llama.modeling_llama import (
     eager_attention_forward,
 )
 from ..mistral.modeling_mistral import MistralModel
-from .configuration_hunyuan_v1_dense import HunYuanMoEV1Config
+from .configuration_hunyuan_v1_moe import HunYuanMoEV1Config
 
 
 logger = logging.get_logger(__name__)

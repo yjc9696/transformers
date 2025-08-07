@@ -93,10 +93,10 @@ class HunYuanDenseV1Config(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        use_rotary_pos_emb (`bool`, *optional*, defaults to `True`):
-            Whether to use rotary_pos_emb.
         head_dim (`int`, *optional*, defaults to 128):
             The attention head dimension.
+        sliding_window (`int`, *optional*, defaults to 4096):
+            Sliding window attention (SWA) window size. If not specified, will default to `4096`.
     """
 
     model_type = "hunyuan_v1_dense"
@@ -125,7 +125,6 @@ class HunYuanDenseV1Config(PretrainedConfig):
         rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
-        use_rotary_pos_emb=True,
         head_dim=None,
         sliding_window=None,
         **kwargs,
@@ -153,7 +152,6 @@ class HunYuanDenseV1Config(PretrainedConfig):
         # self._rope_scaling_validation()   # TODO: Need validation?
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        self.use_rotary_pos_emb = use_rotary_pos_emb
 
         super().__init__(
             pad_token_id=pad_token_id,

@@ -35,12 +35,12 @@ from ..llama.modeling_llama import (
     LlamaForCausalLM,
     LlamaForSequenceClassification,
     LlamaMLP,
+    LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..mistral.modeling_mistral import MistralModel
 from .configuration_hunyuan_v1_moe import HunYuanMoEV1Config
 
 
@@ -336,7 +336,7 @@ class HunYuanMoEV1PreTrainedModel(LlamaPreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-class HunYuanMoEV1Model(MistralModel):
+class HunYuanMoEV1Model(LlamaModel):
     pass
 
 

@@ -78,8 +78,8 @@ class HunYuanMoEV1Attention(LlamaAttention):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.query_layernorm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
-        key_states = self.key_layernorm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
@@ -89,6 +89,9 @@ class HunYuanMoEV1Attention(LlamaAttention):
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        query_states = self.query_layernorm(query_states)
+        key_states = self.key_layernorm(key_states)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":

@@ -221,8 +221,8 @@ class HunYuanMoE(nn.Module):
 
         # dispatched_input = torch.einsum("sec,sm->ecm", dispatch_mask.type_as(hidden_states), reshaped_input)
         dispatch_mask_expanded = dispatch_mask.type_as(hidden_states).unsqueeze(3)  #  (s, e, c, 1)
-        reshaped_input_expanded = reshaped_input.unsqueeze(0)  # (1, e, c, m)
-        dispatched_input = (dispatch_mask_expanded * reshaped_input_expanded).sum(dim=(1, 2))  #  (s, m)
+        reshaped_input_expanded = reshaped_input.unsqueeze(1).unsqueeze(1)  # (s, 1, 1, m)
+        dispatched_input = (dispatch_mask_expanded * reshaped_input_expanded).sum(dim=(0))  #  (s, m)
 
         chunks = dispatched_input.chunk(self.num_experts, dim=0)
         expert_outputs = []

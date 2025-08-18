@@ -229,6 +229,41 @@ class HunYuanMoEV1Attention(nn.Module):
 
 
 def topkgating(logits: Tensor, topk: int):
+    if topk == 1:
+        """Implements Top1Gating on logits."""
+        # everything is in fp32 in this function
+        logits = logits.float()
+        gates = F.softmax(logits, dim=1)
+        capacity = gates.shape[0]
+
+        # Create a mask for 1st's expert per token
+        # noisy gating
+        indices1_s = torch.argmax(gates, dim=1)
+        num_experts = int(gates.shape[1])
+        mask1 = F.one_hot(indices1_s, num_classes=num_experts)
+
+        # gating decisions
+
+        top_idx = torch.topk(mask1, k=capacity, dim=0)[1]
+
+        new_mask1 = mask1 * torch.zeros_like(mask1).scatter_(0, top_idx, 1)
+        mask1 = new_mask1
+        # Compute locations in capacity buffer
+        locations1 = torch.cumsum(mask1, dim=0) - 1
+
+        # Store the capacity location for each token
+        locations1_s = torch.sum(locations1 * mask1, dim=1)
+
+        # Normalize gate probabilities
+        mask1_float = mask1.float()
+        gates = gates * mask1_float
+
+        locations1_sc = F.one_hot(locations1_s, num_classes=capacity).float()  # one hot to float
+        combine_weights = torch.einsum("se,sc->sec", gates, locations1_sc)
+
+        dispatch_mask = combine_weights.bool()
+        return combine_weights, dispatch_mask
+
     logits = logits.float()
     gates = F.softmax(logits, dim=1)
     # expert_capacity = topk * gates.shape[0]
@@ -448,8 +483,15 @@ class HunYuanMoEV1RotaryEmbedding(nn.Module):
 
         self.config = config
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        if self.rope_type == "dynamic" and config.rope_scaling["alpha"]:
+            # DynamicNTKAlphaRotary
+            self.dim = config.head_dim
+            base = config.rope_theta * config.rope_scaling.get("alpha") ** (self.dim / (self.dim - 2))
+            inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
+            self.attention_scaling = 1.0
+        else:
+            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 

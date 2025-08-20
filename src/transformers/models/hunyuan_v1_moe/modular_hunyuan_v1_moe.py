@@ -233,49 +233,87 @@ class HunYuanTopKGate(nn.Module):
         return gate_output
 
 
-class HunYuanMoE(nn.Module):
+class HunYuanMoEV1Moe(nn.Module):
     def __init__(self, config: HunYuanMoEV1Config, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.moe_topk = config.moe_topk
         self.num_experts = config.num_experts if isinstance(config.num_experts, int) else config.num_experts[layer_idx]
-        self.shared_mlp = HunYuanMoEV1MLP(config, layer_idx=layer_idx, is_shared_mlp=True)
-        self.gate = HunYuanTopKGate(config, layer_idx=layer_idx)
+        self.topk = config.moe_topk if isinstance(config.moe_topk, int) else config.moe_topk[layer_idx]
+
+        # self.gate = HunYuanTopKGate(config, layer_idx=layer_idx)
+        self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False, dtype=torch.float32)
         self.experts = nn.ModuleList(
             [HunYuanMoEV1MLP(config, layer_idx=layer_idx, is_shared_mlp=False) for _ in range(self.num_experts)]
         )
 
-    def forward(self, hidden_states):
-        bsz, seq_len, hidden_size = hidden_states.shape
+        self.shared_mlp = HunYuanMoEV1MLP(config, layer_idx=layer_idx, is_shared_mlp=True)
 
-        hidden_states_mlp = self.shared_mlp(hidden_states)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
+        hidden_states = hidden_states.view(-1, hidden_dim)
+        # router_logits: (batch * sequence_length, n_experts)
+        router_logits = self.gate(hidden_states)
 
-        combine_weights, dispatch_mask = self.gate(hidden_states)
+        routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
+        routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
+        # we cast back to the input dtype
+        routing_weights = routing_weights.to(hidden_states.dtype)
 
-        reshaped_input = hidden_states.reshape(-1, hidden_size)
+        final_hidden_states = torch.zeros(
+            (batch_size * sequence_length, hidden_dim), dtype=hidden_states.dtype, device=hidden_states.device
+        )
 
-        # dispatched_input = torch.einsum("sec,sm->ecm", dispatch_mask.type_as(hidden_states), reshaped_input)
-        dispatch_mask_expanded = dispatch_mask.type_as(hidden_states).unsqueeze(3)  #  (s, e, c, 1)
-        reshaped_input_expanded = reshaped_input.unsqueeze(1).unsqueeze(1)  # (s, 1, 1, m)
-        dispatched_input = (dispatch_mask_expanded * reshaped_input_expanded).sum(dim=(0))  #  (s, m)
+        # One hot encode the selected experts to create an expert mask
+        # this will be used to easily index which expert is going to be sollicitated
+        expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
 
-        chunks = dispatched_input.chunk(self.num_experts, dim=0)
-        expert_outputs = []
-        for chunk, expert in zip(chunks, self.experts):
-            expert_outputs.append(expert(chunk))
+        # Loop over all available experts in the model and perform the computation on each expert
+        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+        for expert_idx in expert_hit:
+            expert_layer = self.experts[expert_idx]
+            idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
 
-        expert_output = torch.cat(expert_outputs, dim=0)
-        # combined_output = torch.einsum("sec,ecm->sm", combine_weights.type_as(hidden_states), expert_output)
-        combine_exp = combine_weights.type_as(hidden_states).unsqueeze(3)  # (s, e, c, 1)
-        expert_exp = expert_output.unsqueeze(0)  # (1, e, c, m)
-        combined_output = (combine_exp * expert_exp).sum(dim=(1, 2))  # (s, m)
+            # Index the correct hidden states and compute the expert hidden state for
+            # the current expert. We need to make sure to multiply the output hidden
+            # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
+            current_state = hidden_states[None, top_x].reshape(-1, hidden_dim)
+            current_hidden_states = expert_layer(current_state) * routing_weights[top_x, idx, None]
 
-        combined_output = combined_output.reshape(bsz, seq_len, hidden_size)
+            # However `index_add_` only support torch tensors for indexing so we'll use
+            # the `top_x` tensor here.
+            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
+        final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+        return final_hidden_states
+        # bsz, seq_len, hidden_size = hidden_states.shape
 
-        output = hidden_states_mlp + combined_output
+        # hidden_states_mlp = self.shared_mlp(hidden_states)
 
-        return output
+        # combine_weights, dispatch_mask = self.gate(hidden_states)
+
+        # reshaped_input = hidden_stamaketes.reshape(-1, hidden_size)
+
+        # # dispatched_input = torch.einsum("sec,sm->ecm", dispatch_mask.type_as(hidden_states), reshaped_input)
+        # dispatch_mask_expanded = dispatch_mask.type_as(hidden_states).unsqueeze(3)  #  (s, e, c, 1)
+        # reshaped_input_expanded = reshaped_input.unsqueeze(1).unsqueeze(1)  # (s, 1, 1, m)
+        # dispatched_input = (dispatch_mask_expanded * reshaped_input_expanded).sum(dim=(0))  #  (s, m)
+
+        # chunks = dispatched_input.chunk(self.num_experts, dim=0)
+        # expert_outputs = []
+        # for chunk, expert in zip(chunks, self.experts):
+        #     expert_outputs.append(expert(chunk))
+
+        # expert_output = torch.cat(expert_outputs, dim=0)
+        # # combined_output = torch.einsum("sec,ecm->sm", combine_weights.type_as(hidden_states), expert_output)
+        # combine_exp = combine_weights.type_as(hidden_states).unsqueeze(3)  # (s, e, c, 1)
+        # expert_exp = expert_output.unsqueeze(0)  # (1, e, c, m)
+        # combined_output = (combine_exp * expert_exp).sum(dim=(1, 2))  # (s, m)
+
+        # combined_output = combined_output.reshape(bsz, seq_len, hidden_size)
+        # combined_output = routed_out.reshape(router_scores.shape[1], -1, routed_out.shape[-1]).sum(dim=0))
+        # output = hidden_states_mlp + combined_output
+
+        # return output
 
 
 class HunYuanMoEV1DecoderLayer(LlamaDecoderLayer):
@@ -283,7 +321,7 @@ class HunYuanMoEV1DecoderLayer(LlamaDecoderLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = HunYuanMoEV1Attention(config=config, layer_idx=layer_idx)
-        self.mlp = HunYuanMoE(config, layer_idx=layer_idx)
+        self.mlp = HunYuanMoEV1Moe(config, layer_idx=layer_idx)
         self.input_layernorm = HunYuanMoEV1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = HunYuanMoEV1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.layer_idx = layer_idx

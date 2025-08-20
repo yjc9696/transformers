@@ -348,6 +348,29 @@ class HunYuanTopKGate(nn.Module):
         return gate_output
 
 
+class HunYuanMoEV1Gate(nn.Module):
+    def __init__(self, config: HunYuanMoEV1Config, layer_idx: Optional[int] = None):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        self.moe_topk = config.moe_topk if isinstance(config.moe_topk, int) else config.moe_topk[layer_idx]
+        self.drop_tokens = config.moe_drop_tokens
+        self.random_routing_dropped_token = config.moe_random_routing_dropped_token
+        num_experts = config.num_experts if isinstance(config.num_experts, int) else config.num_experts[layer_idx]
+        self.wg = nn.Linear(config.hidden_size, num_experts, bias=False, dtype=torch.float32)
+
+    def forward(self, hidden_states):
+        bsz, seq_len, hidden_size = hidden_states.shape
+        hidden_states = hidden_states.reshape(-1, hidden_size)
+        if self.wg.weight.dtype == torch.float32:
+            hidden_states = hidden_states.float()
+        logits = self.wg(hidden_states)
+        return logits
+        # gate_output = topkgating(logits, self.moe_topk)
+
+        # return gate_output
+
+
 class HunYuanMoEV1Moe(nn.Module):
     def __init__(self, config: HunYuanMoEV1Config, layer_idx: Optional[int] = None):
         super().__init__()
@@ -356,8 +379,8 @@ class HunYuanMoEV1Moe(nn.Module):
         self.num_experts = config.num_experts if isinstance(config.num_experts, int) else config.num_experts[layer_idx]
         self.top_k = config.moe_topk if isinstance(config.moe_topk, int) else config.moe_topk[layer_idx]
 
-        # self.gate = HunYuanTopKGate(config, layer_idx=layer_idx)
-        self.wg = nn.Linear(config.hidden_size, config.num_experts, bias=False, dtype=torch.float32)
+        self.gate = HunYuanMoEV1KGate(config, layer_idx=layer_idx)
+        # self.wg = nn.Linear(config.hidden_size, config.num_experts, bias=False, dtype=torch.float32)
         self.experts = nn.ModuleList(
             [HunYuanMoEV1MLP(config, layer_idx=layer_idx, is_shared_mlp=False) for _ in range(self.num_experts)]
         )
@@ -369,7 +392,7 @@ class HunYuanMoEV1Moe(nn.Module):
         hidden_states_mlp = self.shared_mlp(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_dim)
         # router_logits: (batch * sequence_length, n_experts)
-        router_logits = self.wg(hidden_states)
+        router_logits = self.gate(hidden_states)
 
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
         routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)

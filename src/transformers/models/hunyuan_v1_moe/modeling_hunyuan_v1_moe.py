@@ -406,7 +406,7 @@ class HunYuanMoEV1Moe(nn.Module):
 
         # combine_weights, dispatch_mask = self.gate(hidden_states)
 
-        # reshaped_input = hidden_states.reshape(-1, hidden_size)
+        # reshaped_input = hidden_stamaketes.reshape(-1, hidden_size)
 
         # # dispatched_input = torch.einsum("sec,sm->ecm", dispatch_mask.type_as(hidden_states), reshaped_input)
         # dispatch_mask_expanded = dispatch_mask.type_as(hidden_states).unsqueeze(3)  #  (s, e, c, 1)

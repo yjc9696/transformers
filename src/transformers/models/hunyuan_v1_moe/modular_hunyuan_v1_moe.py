@@ -251,6 +251,7 @@ class HunYuanMoEV1Moe(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
+        hidden_states_mlp = self.shared_mlp(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_dim)
         # router_logits: (batch * sequence_length, n_experts)
         router_logits = self.gate(hidden_states)
@@ -284,7 +285,7 @@ class HunYuanMoEV1Moe(nn.Module):
             # the `top_x` tensor here.
             final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
         final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
-        return final_hidden_states
+        return final_hidden_states + hidden_states_mlp
         # bsz, seq_len, hidden_size = hidden_states.shape
 
         # hidden_states_mlp = self.shared_mlp(hidden_states)

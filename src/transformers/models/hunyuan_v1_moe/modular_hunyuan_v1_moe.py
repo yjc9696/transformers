@@ -239,7 +239,7 @@ class HunYuanMoEV1Moe(nn.Module):
         self.config = config
         self.layer_idx = layer_idx
         self.num_experts = config.num_experts if isinstance(config.num_experts, int) else config.num_experts[layer_idx]
-        self.topk = config.moe_topk if isinstance(config.moe_topk, int) else config.moe_topk[layer_idx]
+        self.top_k = config.moe_topk if isinstance(config.moe_topk, int) else config.moe_topk[layer_idx]
 
         # self.gate = HunYuanTopKGate(config, layer_idx=layer_idx)
         self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False, dtype=torch.float32)

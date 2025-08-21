@@ -145,8 +145,6 @@ class HunYuanMoEV1Config(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.num_experts = num_experts
         self.moe_topk = moe_topk
-        self.moe_drop_tokens = moe_drop_tokens
-        self.moe_random_routing_dropped_token = moe_random_routing_dropped_token
 
         self.head_dim = head_dim
         # for backward compatibility

@@ -15,6 +15,8 @@
 
 import unittest
 
+import pytest
+
 from transformers import HunYuanMoEV1Config, is_torch_available
 from transformers.testing_utils import (
     cleanup,
@@ -26,6 +28,8 @@ from transformers.testing_utils import (
 
 if is_torch_available():
     from transformers import (
+        AutoModelForCausalLM,
+        AutoTokenizer,
         HunYuanMoEV1ForCausalLM,
         HunYuanMoEV1ForSequenceClassification,
         HunYuanMoEV1Model,
@@ -77,6 +81,7 @@ class HunYuanMoEV1ModelTest(CausalLMModelTest, unittest.TestCase):
         processor_name,
     ):
         return True
+
     @unittest.skip("Hunyuan model Unsupported")
     @pytest.mark.torch_compile_test
     def test_generate_compile_model_forward(self):
@@ -97,10 +102,8 @@ class HunYuanMoEV1IntegrationTest(unittest.TestCase):
         # pass
         EXPECTED_ANSWER = "\nRegular exercise offers numerous physical, mental, and emotional benefits. It improves cardiovascular health, strengthens muscles and bones, boosts metabolism, and helps"
         prompt = "Write a short summary of the benefits of regular exercise "
-        tokenizer = AutoTokenizer.from_pretrained(
-            "tencent/Hunyuan-A13B-Instruct", use_fast=False, trust_remote_code=True
-        )
-        model = HunYuanMoEV1ForCausalLM.from_pretrained("tencent/Hunyuan-A13B-Instruct", device_map="auto")
+        tokenizer = AutoTokenizer.from_pretrained("tencent/Hunyuan-A13B-Instruct")
+        model = AutoModelForCausalLM.from_pretrained("tencent/Hunyuan-A13B-Instruct", device_map="auto")
         messages = [
             {"role": "user", "content": prompt},
         ]

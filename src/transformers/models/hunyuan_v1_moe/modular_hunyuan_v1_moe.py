@@ -19,7 +19,7 @@ from typing import Callable, Optional
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
-from torch import Tensor, nn
+from torch import nn
 
 from transformers.cache_utils import Cache
 from transformers.utils import (
@@ -113,133 +113,11 @@ class HunYuanMoEV1Attention(LlamaAttention):
         return attn_output, attn_weights
 
 
-def topkgating(logits: Tensor, topk: int):
-    if topk == 1:
-        """Implements Top1Gating on logits."""
-        # everything is in fp32 in this function
-        logits = logits.float()
-        gates = F.softmax(logits, dim=1)
-        capacity = gates.shape[0]
-
-        # Create a mask for 1st's expert per token
-        # noisy gating
-        indices1_s = torch.argmax(gates, dim=1)
-        num_experts = int(gates.shape[1])
-        mask1 = F.one_hot(indices1_s, num_classes=num_experts)
-
-        # gating decisions
-
-        top_idx = torch.topk(mask1, k=capacity, dim=0)[1]
-
-        new_mask1 = mask1 * torch.zeros_like(mask1).scatter_(0, top_idx, 1)
-        mask1 = new_mask1
-        # Compute locations in capacity buffer
-        locations1 = torch.cumsum(mask1, dim=0) - 1
-
-        # Store the capacity location for each token
-        locations1_s = torch.sum(locations1 * mask1, dim=1)
-
-        # Normalize gate probabilities
-        mask1_float = mask1.float()
-        gates = gates * mask1_float
-
-        locations1_sc = F.one_hot(locations1_s, num_classes=capacity).float()  # one hot to float
-        combine_weights = torch.einsum("se,sc->sec", gates, locations1_sc)
-
-        dispatch_mask = combine_weights.bool()
-        return combine_weights, dispatch_mask
-
-    logits = logits.float()
-    gates = F.softmax(logits, dim=1)
-    # expert_capacity = topk * gates.shape[0]
-    expert_capacity = max(topk, topk * gates.shape[0] // gates.shape[1])
-    num_experts = int(gates.shape[1])
-    # Top-k router probability and corresponding expert indices for each token.
-    # Shape: [tokens_per_group, num_selected_experts].
-    expert_gate, expert_index = torch.topk(gates, topk)
-    expert_mask = F.one_hot(expert_index, num_experts)
-    # For a given token, determine if it was routed to a given expert.
-    # Shape: [tokens_per_group, num_experts]
-
-    gates_s = torch.clamp(
-        torch.matmul(expert_mask.float(), gates.unsqueeze(-1)).sum(dim=1), min=torch.finfo(gates.dtype).eps
-    )
-    router_probs = gates / gates_s
-    # Make num_selected_experts the leading axis to ensure that top-1 choices
-    # have priority over top-2 choices, which have priority over top-3 choices,
-    # etc.
-    expert_index = torch.transpose(expert_index, 0, 1)
-    # Shape: [num_selected_experts * tokens_per_group]
-    expert_index = expert_index.reshape(-1)
-
-    # Create mask out of indices.
-    # Shape: [tokens_per_group * num_selected_experts, num_experts].
-    expert_mask = F.one_hot(expert_index, num_experts).to(torch.int32)
-
-    # Experts have a fixed capacity that we cannot exceed. A token's priority
-    # within the expert's buffer is given by the masked, cumulative capacity of
-    # its target expert.
-    # Shape: [tokens_per_group * num_selected_experts, num_experts].
-    token_priority = torch.cumsum(expert_mask, dim=0) * expert_mask - 1
-    # Shape: [num_selected_experts, tokens_per_group, num_experts].
-    token_priority = token_priority.reshape((topk, -1, num_experts))
-    # Shape: [tokens_per_group, num_selected_experts, num_experts].
-    token_priority = torch.transpose(token_priority, 0, 1)
-    # For each token, across all selected experts, select the only non-negative
-    # (unmasked) priority. Now, for group G routing to expert E, token T has
-    # non-negative priority (i.e. token_priority[G,T,E] >= 0) if and only if E
-    # is its targeted expert.
-    # Shape: [tokens_per_group, num_experts].
-    token_priority = torch.max(token_priority, dim=1)[0]
-
-    # Token T can only be routed to expert E if its priority is positive and
-    # less than the expert capacity. One-hot matrix will ignore indices outside
-    # the range [0, expert_capacity).
-    # Shape: [tokens_per_group, num_experts, expert_capacity].
-    valid_mask = torch.logical_and(token_priority >= 0, token_priority < expert_capacity)
-    token_priority = torch.masked_fill(token_priority, ~valid_mask, 0)
-    dispatch_mask = F.one_hot(token_priority, expert_capacity).to(torch.bool)
-    valid_mask = valid_mask.unsqueeze(-1).expand(-1, -1, expert_capacity)
-    dispatch_mask = torch.masked_fill(dispatch_mask, ~valid_mask, 0)
-
-    # The combine array will be used for combining expert outputs, scaled by the
-    # router probabilities. Shape: [num_groups, tokens_per_group, num_experts,
-    # expert_capacity].
-    # combine_weights = torch.einsum("...te,...tec->...tec", router_probs, dispatch_mask)
-    router_probs_expanded = router_probs.unsqueeze(-1)
-    combine_weights = router_probs_expanded * dispatch_mask
-    return combine_weights, dispatch_mask
-
-
-class HunYuanTopKGate(nn.Module):
-    def __init__(self, config: HunYuanMoEV1Config, layer_idx: Optional[int] = None):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.moe_topk = config.moe_topk if isinstance(config.moe_topk, int) else config.moe_topk[layer_idx]
-        self.drop_tokens = config.moe_drop_tokens
-        self.random_routing_dropped_token = config.moe_random_routing_dropped_token
-        num_experts = config.num_experts if isinstance(config.num_experts, int) else config.num_experts[layer_idx]
-        self.wg = nn.Linear(config.hidden_size, num_experts, bias=False, dtype=torch.float32)
-
-    def forward(self, hidden_states):
-        bsz, seq_len, hidden_size = hidden_states.shape
-        hidden_states = hidden_states.reshape(-1, hidden_size)
-        if self.wg.weight.dtype == torch.float32:
-            hidden_states = hidden_states.float()
-        logits = self.wg(hidden_states)
-        gate_output = topkgating(logits, self.moe_topk)
-
-        return gate_output
-
 class HunYuanMoEV1Gate(nn.Module):
     def __init__(self, config: HunYuanMoEV1Config, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.moe_topk = config.moe_topk if isinstance(config.moe_topk, int) else config.moe_topk[layer_idx]
-        self.drop_tokens = config.moe_drop_tokens
-        self.random_routing_dropped_token = config.moe_random_routing_dropped_token
         num_experts = config.num_experts if isinstance(config.num_experts, int) else config.num_experts[layer_idx]
         self.wg = nn.Linear(config.hidden_size, num_experts, bias=False, dtype=torch.float32)
 
@@ -250,9 +128,8 @@ class HunYuanMoEV1Gate(nn.Module):
             hidden_states = hidden_states.float()
         logits = self.wg(hidden_states)
         return logits
-        # gate_output = topkgating(logits, self.moe_topk)
 
-        # return gate_output
+
 class HunYuanMoEV1Moe(nn.Module):
     def __init__(self, config: HunYuanMoEV1Config, layer_idx: Optional[int] = None):
         super().__init__()
@@ -308,35 +185,6 @@ class HunYuanMoEV1Moe(nn.Module):
             final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
         final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return final_hidden_states + hidden_states_mlp
-        # bsz, seq_len, hidden_size = hidden_states.shape
-
-        # hidden_states_mlp = self.shared_mlp(hidden_states)
-
-        # combine_weights, dispatch_mask = self.gate(hidden_states)
-
-        # reshaped_input = hidden_stamaketes.reshape(-1, hidden_size)
-
-        # # dispatched_input = torch.einsum("sec,sm->ecm", dispatch_mask.type_as(hidden_states), reshaped_input)
-        # dispatch_mask_expanded = dispatch_mask.type_as(hidden_states).unsqueeze(3)  #  (s, e, c, 1)
-        # reshaped_input_expanded = reshaped_input.unsqueeze(1).unsqueeze(1)  # (s, 1, 1, m)
-        # dispatched_input = (dispatch_mask_expanded * reshaped_input_expanded).sum(dim=(0))  #  (s, m)
-
-        # chunks = dispatched_input.chunk(self.num_experts, dim=0)
-        # expert_outputs = []
-        # for chunk, expert in zip(chunks, self.experts):
-        #     expert_outputs.append(expert(chunk))
-
-        # expert_output = torch.cat(expert_outputs, dim=0)
-        # # combined_output = torch.einsum("sec,ecm->sm", combine_weights.type_as(hidden_states), expert_output)
-        # combine_exp = combine_weights.type_as(hidden_states).unsqueeze(3)  # (s, e, c, 1)
-        # expert_exp = expert_output.unsqueeze(0)  # (1, e, c, m)
-        # combined_output = (combine_exp * expert_exp).sum(dim=(1, 2))  # (s, m)
-
-        # combined_output = combined_output.reshape(bsz, seq_len, hidden_size)
-        # combined_output = routed_out.reshape(router_scores.shape[1], -1, routed_out.shape[-1]).sum(dim=0))
-        # output = hidden_states_mlp + combined_output
-
-        # return output
 
 
 class HunYuanMoEV1DecoderLayer(LlamaDecoderLayer):

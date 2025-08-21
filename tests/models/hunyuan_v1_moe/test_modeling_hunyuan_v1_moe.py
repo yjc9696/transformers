@@ -84,7 +84,7 @@ class HunYuanMoEV1ModelTest(CausalLMModelTest, unittest.TestCase):
 
     @unittest.skip("Hunyuan model Unsupported")
     @pytest.mark.torch_compile_test
-    def test_generate_compile_model_forward(self):
+    def test_generate_compilation_all_outputs(self):
         pass
 
 
